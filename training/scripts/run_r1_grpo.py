@@ -12,7 +12,8 @@ from transformers.trainer_utils import get_last_checkpoint
 from transformers import AutoTokenizer
 from datasets import load_dataset
 from trl import GRPOConfig, GRPOTrainer, get_peft_config, ModelConfig, TrlParser
-from huggingface_hub import login
+import wandb
+from accelerate.utils import is_main_process
 
 
 ########################
@@ -23,6 +24,8 @@ class ScriptArguments:
     dataset_id_or_path: str = "Jiayi-Pan/Countdown-Tasks-3to4"
     dataset_splits: str = "train"
     tokenizer_name_or_path: str = None
+    wandb_project: str = "countdown-math"
+    wandb_name: str = None
 
 
 ########################
@@ -144,9 +147,19 @@ def get_checkpoint(training_args: GRPOConfig):
 def grpo_function(
     model_args: ModelConfig, script_args: ScriptArguments, training_args: GRPOConfig
 ):
-    login(token="", add_to_git_credential=True) # ADD YOUR TOKEN HERE
-
-
+    # Initialize wandb only on the main process
+    if is_main_process():
+        wandb.init(
+            project=script_args.wandb_project,
+            name=script_args.wandb_name,
+            config={
+                "model_name": model_args.model_name_or_path,
+                "learning_rate": training_args.learning_rate,
+                "batch_size": training_args.per_device_train_batch_size,
+                "max_steps": training_args.max_steps,
+                "beta": training_args.beta,
+            }
+        )
     
     #########################
     # Log parameters
@@ -240,7 +253,11 @@ def grpo_function(
     trainer.save_metrics("train", metrics)
     trainer.save_state()
 
+    if is_main_process():
+        wandb.finish()
+
     logger.info("*** Training complete ***")
+
 
     ##################################
     # Save model and create model card

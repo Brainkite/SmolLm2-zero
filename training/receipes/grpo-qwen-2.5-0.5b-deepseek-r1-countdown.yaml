@@ -37,9 +37,14 @@ logging_strategy: steps
 logging_steps: 1
 report_to:
 - tensorboard
+- wandb
 save_strategy: "steps"
 save_steps: 25
 seed: 42
+
+# Add W&B specific configs
+wandb_project: "countdown-GRPO"
+wandb_name: "qwen-2.5-0.5b-r1-countdown"
 
 # Hugging Face Hub 
 push_to_hub: true
