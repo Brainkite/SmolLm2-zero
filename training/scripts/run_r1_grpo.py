@@ -12,6 +12,7 @@ from transformers.trainer_utils import get_last_checkpoint
 from transformers import AutoTokenizer
 from datasets import load_dataset
 from trl import GRPOConfig, GRPOTrainer, get_peft_config, ModelConfig, TrlParser
+from huggingface_hub import login
 
 
 ########################
@@ -143,6 +144,10 @@ def get_checkpoint(training_args: GRPOConfig):
 def grpo_function(
     model_args: ModelConfig, script_args: ScriptArguments, training_args: GRPOConfig
 ):
+    login(token="", add_to_git_credential=True) # ADD YOUR TOKEN HERE
+
+
+    
     #########################
     # Log parameters
     #########################
@@ -180,7 +185,7 @@ def grpo_function(
     def generate_r1_prompt(numbers, target):
         r1_prefix = [{
             "role": "system",
-            "content": "You are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer."
+            "content": "You are a helpful assistant. You first thinks about the reasoning process in your mind and then provides the user with the answer."
           },
           { 
             "role": "user",
