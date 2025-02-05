@@ -14,7 +14,7 @@ dataset_id_or_path: Jiayi-Pan/Countdown-Tasks-3to4
 # No LoRA is used here
 
 # Training arguments
-max_steps: 2 #450
+max_steps: 1
 per_device_train_batch_size: 1
 gradient_accumulation_steps: 8
 gradient_checkpointing: true
@@ -23,30 +23,26 @@ gradient_checkpointing_kwargs:
 learning_rate: 5.0e-7 # 1.0e-6 as in the deepseek math paper 5-e7 from https://hijkzzz.notion.site/unraveling-rlhf-and-its-variants-engineering-insights#147d9a33ecc9806090f3d5c749d31f05
 lr_scheduler_type: cosine
 warmup_ratio: 0.03
+
 # GRPO specific parameters
 beta: 0.001 # 0.04 as in the deepseek math paper 0.001 from https://hijkzzz.notion.site/unraveling-rlhf-and-its-variants-engineering-insights#147d9a33ecc9806090f3d5c749d31f05
 max_prompt_length: 256
 max_completion_length: 1024
-num_generations: 4 #8
+num_generations: 8
 use_vllm: true
-vllm_device: "cuda:0"
-vllm_gpu_memory_utilization: 0.1 #0.5
+vllm_device: "cuda:1"
+vllm_gpu_memory_utilization: 0.5
 
 # Logging arguments
 logging_strategy: steps
-logging_steps: 1
+logging_steps: 2
 report_to:
-- tensorboard
 - wandb
 save_strategy: "steps"
 save_steps: 25
 seed: 42
 
-# Add W&B specific configs
-wandb_project: "countdown-GRPO"
-wandb_name: "qwen-2.5-0.5b-r1-countdown"
-
-# Hugging Face Hub 
-push_to_hub: true
+# Hugging Face Hub
+push_to_hub: false
   # hub_model_id: llama-3-1-8b-math-orca-qlora-10k-ep1 # if not defined same as output_dir
 hub_strategy: every_save

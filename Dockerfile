@@ -15,6 +15,8 @@ COPY requirements.txt .
 # Install Python dependencies
 # First upgrade setuptools to meet vllm requirements
 RUN pip install --no-cache-dir setuptools>=74.1.1 && \
+    pip uninstall -y pynvml && \
+    pip install --no-cache-dir nvidia-ml-py && \
     pip install --no-cache-dir -r requirements.txt && \
     rm requirements.txt
 
