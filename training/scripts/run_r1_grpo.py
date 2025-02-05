@@ -150,6 +150,16 @@ def get_checkpoint(training_args: GRPOConfig):
         last_checkpoint = get_last_checkpoint(training_args.output_dir)
     return last_checkpoint
 
+class MemoryProfileCallback(TrainerCallback):
+    def on_step_end(self, args, state, control, **kwargs):
+        # Dump a memory profile every 10 steps
+        if True: # state.global_step % 10 == 0:
+            if torch.cuda.is_available():
+                rank_suffix = f"_{torch.distributed.get_rank()}" if torch.distributed.is_initialized() else ""
+                profile_filename = f"profile_step_{state.global_step}{rank_suffix}.pkl"
+                torch.cuda.memory._dump_snapshot(profile_filename)
+                logger.info(f"[MemoryProfileCallback] Memory profile saved to {profile_filename}")
+        return control
 
 def grpo_function(
     model_args: ModelConfig, script_args: ScriptArguments, training_args: GRPOConfig
@@ -275,7 +285,7 @@ def grpo_function(
         f'*** Starting training {datetime.now().strftime("%Y-%m-%d %H:%M:%S")} for {training_args.num_train_epochs} epochs***'
     )
     train_result = trainer.train(resume_from_checkpoint=last_checkpoint)
-    
+
     # --- Added GPU Memory Profiling Dump ---
     if torch.cuda.is_available():
         # In distributed training, get the process rank to suffix the filename
@@ -339,14 +349,3 @@ def main():
 if __name__ == "__main__":
     main()
 
-# Add this new callback definition near the top of the file (after imports and helper definitions)
-class MemoryProfileCallback(TrainerCallback):
-    def on_step_end(self, args, state, control, **kwargs):
-        # Dump a memory profile every 10 steps
-        if state.global_step % 10 == 0:
-            if torch.cuda.is_available():
-                rank_suffix = f"_{torch.distributed.get_rank()}" if torch.distributed.is_initialized() else ""
-                profile_filename = f"profile_step_{state.global_step}{rank_suffix}.pkl"
-                torch.cuda.memory._dump_snapshot(profile_filename)
-                logger.info(f"[MemoryProfileCallback] Memory profile saved to {profile_filename}")
-        return control
