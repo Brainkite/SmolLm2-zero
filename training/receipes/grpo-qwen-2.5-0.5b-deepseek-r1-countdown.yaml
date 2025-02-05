@@ -1,4 +1,3 @@
-
 # Model arguments
 model_name_or_path: Qwen/Qwen2.5-0.5B-Instruct
 model_revision: main
@@ -30,7 +29,7 @@ max_prompt_length: 128
 max_completion_length: 256
 num_generations: 8
 use_vllm: true
-vllm_device: "cuda:1"
+vllm_device: "cuda:${VLLM_CUDA_IDX}"
 vllm_gpu_memory_utilization: 0.24
 
 # Logging arguments
