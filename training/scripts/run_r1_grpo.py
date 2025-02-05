@@ -10,7 +10,7 @@ import random
 import re
 import torch
 from transformers.trainer_utils import get_last_checkpoint
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, TrainerCallback
 from datasets import load_dataset
 from trl import GRPOConfig, GRPOTrainer, get_peft_config, ModelConfig, TrlParser
 import wandb
@@ -160,6 +160,12 @@ def grpo_function(
     else:
         is_main = True
 
+    # --- Added GPU Memory Profiling Start ---
+    if torch.cuda.is_available():
+        torch.cuda.memory._record_memory_history(max_entries=100000)
+        logger.info("Started GPU memory profiling")
+    # --- End Added GPU Memory Profiling Start ---
+
     # Initialize wandb only on the main process
     if is_main:
         wandb.init(
@@ -253,6 +259,8 @@ def grpo_function(
         eval_dataset=test_dataset,
         peft_config=get_peft_config(model_args),
     )
+    # --- Added Memory Profiling Callback: dump GPU memory profile every 10 steps ---
+    trainer.callback_handler.add_callback(MemoryProfileCallback())
 
     ###############
     # Training loop
@@ -267,6 +275,17 @@ def grpo_function(
         f'*** Starting training {datetime.now().strftime("%Y-%m-%d %H:%M:%S")} for {training_args.num_train_epochs} epochs***'
     )
     train_result = trainer.train(resume_from_checkpoint=last_checkpoint)
+    
+    # --- Added GPU Memory Profiling Dump ---
+    if torch.cuda.is_available():
+        # In distributed training, get the process rank to suffix the filename
+        rank_suffix = f"_{torch.distributed.get_rank()}" if torch.distributed.is_initialized() else ""
+        profile_filename = f"profile{rank_suffix}.pkl"
+        torch.cuda.memory._dump_snapshot(profile_filename)
+        torch.cuda.memory._record_memory_history(enabled=None)
+        logger.info(f"Memory profile saved to {profile_filename}")
+    # --- End Added GPU Memory Profiling Dump ---
+
     # Log and save metrics
     metrics = train_result.metrics
     metrics["train_samples"] = len(train_dataset)
@@ -303,6 +322,11 @@ def grpo_function(
 
     logger.info("*** Training complete! ***")
 
+    # Dump the memory snapshot after training
+    if is_main:
+        torch.cuda.memory.snapshot()
+        torch.cuda.memory.dump()
+
 
 def main():
     parser = TrlParser((ModelConfig, ScriptArguments, GRPOConfig))
@@ -314,3 +338,15 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# Add this new callback definition near the top of the file (after imports and helper definitions)
+class MemoryProfileCallback(TrainerCallback):
+    def on_step_end(self, args, state, control, **kwargs):
+        # Dump a memory profile every 10 steps
+        if state.global_step % 10 == 0:
+            if torch.cuda.is_available():
+                rank_suffix = f"_{torch.distributed.get_rank()}" if torch.distributed.is_initialized() else ""
+                profile_filename = f"profile_step_{state.global_step}{rank_suffix}.pkl"
+                torch.cuda.memory._dump_snapshot(profile_filename)
+                logger.info(f"[MemoryProfileCallback] Memory profile saved to {profile_filename}")
+        return control
