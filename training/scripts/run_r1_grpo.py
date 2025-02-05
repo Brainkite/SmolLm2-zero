@@ -56,26 +56,16 @@ def format_reward_func(completions, target, **kwargs):
         completions (list[str]): Generated outputs
         target (list[str]): Expected answers
 
-      Returns:
-          list[float]: Reward scores
+    Returns:
+        list[float]: Reward scores
     """
     rewards = []
 
     for completion, gt in zip(completions, target):
-
         try:
             # add synthetic <think> as it's already part of the prompt and prefilled for the assistant
-            # to more easily match the regex
             completion = "<think>" + completion
-            if random.random() < 0.1:  # 1% chance to write samples into a file and log to wandb
-                os.makedirs("completion_samples", exist_ok=True)
-                log_file = os.path.join("completion_samples", "completion_samples.txt")
-                with open(log_file, "a") as f:
-                    f.write(f"\n\n==============\n")
-                    f.write(completion)
-                # Log the sample to wandb along with its corresponding target
-                wandb.log({"sample_completion": completion, "sample_target": gt})
-                
+            
             # Check if the format is correct
             regex = r"^<think>([^<]*(?:<(?!/?think>)[^<]*)*)<\/think>\n<answer>([\s\S]*?)<\/answer>$"
             match = re.search(regex, completion, re.DOTALL)
@@ -159,49 +149,13 @@ def get_checkpoint(training_args: GRPOConfig):
 class MemoryProfileCallback(TrainerCallback):
     def on_step_end(self, args, state, control, **kwargs):
         # Dump a memory profile every 10 steps
-        if True: # state.global_step % 10 == 0:
+        if (state.global_step > 0) and (state.global_step % 10 == 0):
             if torch.cuda.is_available():
                 rank_suffix = f"_{torch.distributed.get_rank()}" if torch.distributed.is_initialized() else ""
                 profile_filename = f"profile_step_{state.global_step}{rank_suffix}.pkl"
                 torch.cuda.memory._dump_snapshot(profile_filename)
                 logger.info(f"[MemoryProfileCallback] Memory profile saved to {profile_filename}")
         # Do not return any value (ensuring return type is None)
-
-# New callback to measure tokens generated per second
-class TokensPerSecondCallback(TrainerCallback):
-    def __init__(self, tokenizer):
-        self.tokenizer = tokenizer
-        self.last_time = None  # to record the beginning of a step
-
-    def on_step_begin(self, args, state, control, **kwargs):
-        # Record the start time for this step
-        self.last_time = time.perf_counter()
-
-    def on_step_end(self, args, state, control, logs=None, **kwargs):
-        if self.last_time is not None:
-            elapsed = time.perf_counter() - self.last_time
-            # Assume generated output text is under the key "generated_output"
-            generated_text = logs.get("generated_output", "") if logs else ""
-            # Count the number of tokens using the provided tokenizer
-            num_tokens = len(self.tokenizer.tokenize(generated_text)) if generated_text else 0
-            tokens_per_sec = num_tokens / elapsed if elapsed > 0 else 0
-
-            # Add the tokens per second metric to the logs dictionary
-            if logs is not None:
-                logs["tokens_per_sec"] = tokens_per_sec
-            else:
-                logs = {"tokens_per_sec": tokens_per_sec}
-
-            logger.info(
-                f"[TokensPerSecondCallback] Step {state.global_step} generated {num_tokens} tokens "
-                f"in {elapsed:.4f} sec ({tokens_per_sec:.2f} tokens/sec)"
-            )
-            # Log the tokens_per_sec stat to wandb
-            try:
-                wandb.log({"tokens_per_sec": tokens_per_sec}, step=state.global_step)
-            except Exception as e:
-                logger.warning(f"Failed to log tokens_per_sec to wandb: {e}")
-        self.last_time = None
 
 def grpo_function(
     model_args: ModelConfig, script_args: ScriptArguments, training_args: GRPOConfig
@@ -313,9 +267,6 @@ def grpo_function(
     )
     # --- Added Memory Profiling Callback: dump GPU memory profile every 10 steps ---
     trainer.callback_handler.add_callback(MemoryProfileCallback())
-    
-    # --- Added Tokens Per Second Callback ---
-    trainer.callback_handler.add_callback(TokensPerSecondCallback(tokenizer))
 
     ###############
     # Training loop
