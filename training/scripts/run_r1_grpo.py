@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import logging
 import os
+import time
 
 # Set tokenizers parallelism to false before any tokenizer operations
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -162,7 +163,35 @@ class MemoryProfileCallback(TrainerCallback):
                 profile_filename = f"profile_step_{state.global_step}{rank_suffix}.pkl"
                 torch.cuda.memory._dump_snapshot(profile_filename)
                 logger.info(f"[MemoryProfileCallback] Memory profile saved to {profile_filename}")
-        return control
+        # Do not return any value (ensuring return type is None)
+
+# New callback to measure tokens generated per second
+class TokensPerSecondCallback(TrainerCallback):
+    def __init__(self, tokenizer):
+        self.tokenizer = tokenizer
+        self.last_time = None  # to record the beginning of a step
+
+    def on_step_begin(self, args, state, control, **kwargs):
+        # Record the start time for this step
+        self.last_time = time.perf_counter()
+
+    def on_step_end(self, args, state, control, logs=None, **kwargs):
+        if self.last_time is not None:
+            elapsed = time.perf_counter() - self.last_time
+            # Example: if your log dictionary contains generated output text under the key "generated_output"
+            generated_text = logs.get("generated_output", "") if logs else ""
+            # Count the number of tokens using the provided tokenizer
+            num_tokens = len(self.tokenizer.tokenize(generated_text)) if generated_text else 0
+            tokens_per_sec = num_tokens / elapsed if elapsed > 0 else 0
+            # Add the tokens per second metric to the logs
+            if logs is not None:
+                logs["tokens_per_sec"] = tokens_per_sec
+            else:
+                logs = {"tokens_per_sec": tokens_per_sec}
+            logger.info(f"[TokensPerSecondCallback] Step {state.global_step} generated {num_tokens} tokens "
+                        f"in {elapsed:.4f} sec ({tokens_per_sec:.2f} tokens/sec)")
+        self.last_time = None
+        # Do not return any value
 
 def grpo_function(
     model_args: ModelConfig, script_args: ScriptArguments, training_args: GRPOConfig
@@ -274,6 +303,9 @@ def grpo_function(
     )
     # --- Added Memory Profiling Callback: dump GPU memory profile every 10 steps ---
     trainer.callback_handler.add_callback(MemoryProfileCallback())
+    
+    # --- Added Tokens Per Second Callback ---
+    trainer.callback_handler.add_callback(TokensPerSecondCallback(tokenizer))
 
     ###############
     # Training loop
