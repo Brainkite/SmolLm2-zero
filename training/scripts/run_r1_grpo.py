@@ -5,6 +5,9 @@ from datetime import datetime
 import logging
 import os
 
+# Set tokenizers parallelism to false before any tokenizer operations
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
 import random
 import re
@@ -332,10 +335,16 @@ def grpo_function(
 
     logger.info("*** Training complete! ***")
 
-    # Dump the memory snapshot after training
-    if is_main:
-        torch.cuda.memory.snapshot()
-        torch.cuda.memory.dump()
+    # Fix the memory profiling code at the end
+    if is_main and torch.cuda.is_available():
+        try:
+            # Dump final memory snapshot
+            rank_suffix = f"_{torch.distributed.get_rank()}" if torch.distributed.is_initialized() else ""
+            profile_filename = f"final_profile{rank_suffix}.pkl"
+            torch.cuda.memory._dump_snapshot(profile_filename)
+            logger.info(f"Final memory profile saved to {profile_filename}")
+        except Exception as e:
+            logger.warning(f"Failed to dump memory profile: {e}")
 
 
 def main():
