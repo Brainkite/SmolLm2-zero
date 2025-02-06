@@ -38,11 +38,12 @@ logging_strategy: steps
 logging_steps: 2
 report_to:
 - tensorboard
+- wandb
 save_strategy: "steps"
 save_steps: 25
 seed: 42
 
 # Hugging Face Hub 
-push_to_hub: true
+push_to_hub: false
   # hub_model_id: llama-3-1-8b-math-orca-qlora-10k-ep1 # if not defined same as output_dir
 hub_strategy: every_save
