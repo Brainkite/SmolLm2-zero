@@ -24,8 +24,8 @@ ENV PATH=/opt/venv/bin:$PATH
 
 # Install Python dependencies
 RUN python -m pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -U pip setuptools<71.0.0 wheel && \
-    pip install --no-cache-dir \
+    pip install --no-cache-dir wheel && \
+    pip install --no-cache-dir "setuptools<71.0.0"\
     torch==2.5.1 \
     --index-url https://download.pytorch.org/whl/cu121 && \
     pip install --no-cache-dir \
